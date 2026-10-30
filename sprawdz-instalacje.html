@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sprawdzenie instalacji · Notatki</title>
+<meta name="theme-color" content="#f1f2f4">
+<link rel="manifest" href="./manifest.webmanifest?v=5">
+<link rel="icon" href="./icon-192.png">
+<style>
+*{box-sizing:border-box}body{font:16px/1.5 system-ui,sans-serif;background:#f4f5f7;color:#202938;margin:0;padding:24px 16px}main{max-width:680px;margin:auto}h1{font-size:27px;line-height:1.2;margin:12px 0}h2{font-size:19px;margin-top:28px}p{color:#4c5b6d}.panel{background:#fff;border:1px solid #dbe1e9;border-radius:16px;padding:18px;margin:18px 0}.item{padding:12px 0;border-bottom:1px solid #eef0f3;display:flex;gap:10px;align-items:start}.item:last-child{border-bottom:0}.dot{height:12px;width:12px;flex:0 0 12px;border-radius:50%;margin-top:7px;background:#eab308}.dot.ok{background:#198754}.dot.bad{background:#d73535}.name{font-weight:650}.detail{font-size:13px;color:#627186;overflow-wrap:anywhere}.action{display:block;text-align:center;width:100%;background:#26374a;color:#fff;text-decoration:none;border:0;padding:15px;border-radius:10px;font:600 16px system-ui;margin:10px 0;cursor:pointer}.action:disabled{background:#a4aeba;cursor:not-allowed}small{display:block;color:#607087}code{background:#edf0f4;border-radius:4px;padding:2px 5px}#notice{font-size:14px;line-height:1.5}a{color:#283e6b}#inst{display:none}#inst.ready{display:block}#success{color:#14754a;font-weight:600}
+</style>
+</head>
+<body><main>
+<a href="./">← Powrót do notatnika</a>
+<h1>Sprawdź instalację aplikacji</h1>
+<p>Sprawdzam pliki PWA w tym samym folderze GitHub Pages co notatnik. Po naprawie wszystkie testy powinny być zielone.</p>
+<div class="panel" id="tests"><p>Trwa sprawdzanie…</p></div>
+<section id="inst"><button id="install" class="action" type="button">Zainstaluj aplikację</button></section>
+<p id="notice" aria-live="polite">Sprawdzam, czy Chrome udostępnia instalację…</p>
+<p id="success" aria-live="polite"></p>
+<h2>Jeśli instalacja nadal nie jest dostępna</h2>
+<p>Otwórz <a href="./">stronę główną notatnika</a>, chwilę z niej korzystaj i użyj menu <b>⋮ → Dodaj do ekranu głównego → Zainstaluj</b>. Chrome sam decyduje, kiedy pozwala wyświetlić okno instalacji. Przycisk powyżej pojawia się <b>tylko wtedy</b>, gdy Chrome już na to pozwoli.</p>
+<p>Jeżeli ikony pokazują 404, wgraj pliki ZIP-a bezpośrednio do głównego katalogu repozytorium (bez folderu <code>icons</code>).</p>
+<p>Nie czyść danych witryny — mogą zawierać Twoje notatki.</p>
+<small id="env"></small>
+<script>
+(function(){
+  const tests=document.getElementById('tests');
+  const notice=document.getElementById('notice');
+  const installSection=document.getElementById('inst');
+  const installButton=document.getElementById('install');
+  const result=document.getElementById('success');
+  let pending=null;
+  function ready(e){
+    e.preventDefault(); pending=e; installSection.classList.add('ready');
+    notice.textContent='Chrome pozwala teraz otworzyć okno instalacji. Kliknij przycisk „Zainstaluj aplikację”.';
+  }
+  window.addEventListener('beforeinstallprompt',ready);
+  installButton.addEventListener('click', async function(){
+    if(!pending){notice.textContent='Chrome nie udostępnił jeszcze instalacji. Użyj menu ⋮ w Chrome.';return;}
+    const req=pending;pending=null;installSection.classList.remove('ready');
+    try{
+      await req.prompt();const answer=await req.userChoice;
+      notice.textContent=answer&&answer.outcome==='accepted'?'Instalacja została zaakceptowana.':'Okno instalacji zostało zamknięte. Aby spróbować ponownie, użyj menu Chrome lub otwórz stronę ponownie.';
+    }catch(err){notice.textContent='Chrome nie otworzył okna instalacji: '+String(err);}
+  });
+  window.addEventListener('appinstalled',function(){result.textContent='Aplikacja została zainstalowana.';notice.textContent='Gotowe.';installSection.classList.remove('ready');});
+  let ok=true;
+  function row(label,good,detail){
+    if(!good)ok=false;
+    const d=document.createElement('div');d.className='item';
+    const dot=document.createElement('i');dot.className='dot '+(good?'ok':'bad');
+    const box=document.createElement('div');
+    const n=document.createElement('div');n.className='name';n.textContent=label;
+    const t=document.createElement('div');t.className='detail';t.textContent=detail;
+    box.append(n,t);d.append(dot,box);tests.appendChild(d);
+  }
+  async function get(url){try{const r=await fetch(url,{cache:'no-store'});return r;}catch(e){return null;}}
+  (async function(){
+    tests.textContent='';
+    row('Bezpieczne połączenie HTTPS',location.protocol==='https:'||location.hostname==='localhost',location.origin);
+    const resp=await get('./manifest.webmanifest?v=5');let data=null;
+    try{if(!resp||!resp.ok)throw Error(resp?'HTTP '+resp.status:'Brak połączenia');data=await resp.json();row('Manifest PWA',true,'Odczytany prawidłowo');}catch(e){row('Manifest PWA',false,String(e));}
+    if(data){
+      try{const root=new URL('./',location.href);const base=new URL('./manifest.webmanifest',location.href);const start=new URL(data.start_url||'./',base);const scope=new URL(data.scope||'./',base);const isOk=start.href.startsWith(scope.href)&&scope.href===root.href;row('Adres uruchomienia i zakres',isOk,'Start: '+start.href+' | zakres: '+scope.href);}catch(e){row('Adres uruchomienia i zakres',false,String(e));}
+      for(const size of [192,512]){
+        const icon=(data.icons||[]).find(x=>x.sizes===''+size+'x'+size && !String(x.purpose||'any').includes('maskable'));
+        const url=icon?new URL(icon.src, new URL('./manifest.webmanifest',location.href)).href:null;
+        const r=url?await get(url):null;
+        if(!r||!r.ok){row('Ikona '+size+'×'+size,false,(url||'Brak w manifeście')+' · HTTP '+(r?r.status:'—'));continue;}
+        try{const bitmap=await createImageBitmap(await r.blob());const pass=bitmap.width===size&&bitmap.height===size;row('Ikona '+size+'×'+size,pass,url+' · '+bitmap.width+'×'+bitmap.height);bitmap.close();}
+        catch(e){row('Ikona '+size+'×'+size,false,url+' · '+e);}
+      }
+    }
+    const sw=await get('./sw.js?v=5');row('Plik offline (Service Worker)',!!sw&&sw.ok,sw?'HTTP '+sw.status:'Brak połączenia');
+    if('serviceWorker' in navigator){
+      try{
+        const reg=await navigator.serviceWorker.register('./sw.js',{scope:'./'});
+        await navigator.serviceWorker.ready;
+        row('Service Worker działa',!!(reg.active||reg.waiting||reg.installing),'Zakres: '+reg.scope);
+      }catch(e){row('Service Worker działa',false,String(e));}
+    }else row('Service Worker działa',false,'Brak obsługi w przeglądarce');
+    if(matchMedia('(display-mode: standalone)').matches||navigator.standalone===true){notice.textContent='Notatnik jest już otwarty jako aplikacja.';}
+    else if(!pending){notice.textContent=ok?'Wszystkie pliki wyglądają poprawnie. Jeśli przycisk instalacji nie pojawia się, skorzystaj z menu ⋮ w Chrome na stronie notatnika.':'Najpierw popraw czerwone błędy. Instalacja nie będzie dostępna z brakującymi ikonami.';}
+    document.getElementById('env').textContent='Adres: '+location.href;
+  })();
+})();
+</script>
+</main></body></html>
